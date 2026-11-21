@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "solasta-dealer-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [{ "pattern": "mcp.mysolasta.com", "custom_domain": true }],
+  "vars": {
+    "SOLASTA_API_URL": "https://api.mysolasta.com",
+    "IDENTITY_TOKEN_URL": "https://identity.nuvol9.com/connect/token",
+    "MCP_CLIENT_ID": "dealer-mcp",
+    // Quote requests for an address no dealer serves are saved for this dealer, marked out of area.
+    "DEFAULT_DEALER": "solasta"
+  },
+  // Secret (wrangler secret put MCP_CLIENT_SECRET): the dealer-mcp client's secret on the Identity Server.
+  "ratelimits": [
+    // Every MCP request, per IP.
+    { "name": "REQUEST_LIMITER", "namespace_id": "4101", "simple": { "limit": 60, "period": 60 } },
+    // Quote requests (they create leads), per IP.
+    { "name": "QUOTE_LIMITER", "namespace_id": "4102", "simple": { "limit": 3, "period": 60 } }
+  ],
+  "observability": { "enabled": true }
+}
