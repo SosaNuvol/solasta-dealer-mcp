@@ -28,7 +28,7 @@ const INSTRUCTIONS = `Solasta Lighting and its dealers design and install perman
 Use these tools to help a person get a price range and ask the dealer for a quote:
 1. Find the dealer for their ZIP code (find_dealer), unless this server is already for one dealer.
 2. Give a quick rough range from their address (estimate_from_address), and offer a tighter one from a roofline KML (kml_instructions, check_kml, estimate_from_kml).
-3. When they want a real quote, collect their name, email, phone and address and call request_quote.
+3. When they want a real quote, collect their name, email, phone and address and call request_quote. When an estimate includes a quote form link, always show it as a clickable link: the person can open it instead to fill in the dealer's quote form with the estimate already attached.
 Every price here is an estimate at retail prices, not a quote. Always show the range and say the dealer confirms the price after checking the roofline: seasonal promotions, discounts and installation details change the final price. Pass on the estimate's closing note in full, including the dealer's affiliate program and its link when the note mentions one.
 Never invent prices, products or colors: use list_products and the estimate tools.`
 
@@ -307,5 +307,6 @@ export function describeEstimate(dealerName: string, e: Estimate, notes: string[
     ...notes,
     ...e.warnings.map(w => `Note: ${w}`),
     `Estimate ${e.estimateId}, good until ${e.validUntil.slice(0, 10)}. ${e.disclaimer}`,
+    e.quoteUrl ? `To ask ${dealerName} for a quote with this estimate attached, open: ${e.quoteUrl}` : '',
   ].filter(Boolean).join('\n')
 }

@@ -56,8 +56,16 @@ describe('MCP endpoint', () => {
     expect(text).toContain('Estimated price: $4,150 to $5,100')
     expect(text).toContain('in Black')
     expect(text).toContain('Financing from about $84/month')
+    expect(text).not.toContain('quote with this estimate attached')
     const sent = f.calls.find(c => c.url.pathname === '/api/public/solasta/estimates')!
     expect(sent.body).toMatchObject({ source: 'Kml', kml, postalCode: '84043', state: 'UT' })
+  })
+
+  it('shows the quote form link with the estimate attached', async () => {
+    const quoteUrl = 'https://mysolasta.com/quote?estimate=MAPE%3A1%3Aabc'
+    const f = fakeFetch(dealers, (url: URL) => url.pathname === '/api/public/solasta/estimates' ? payload({ ...estimate, quoteUrl }) : undefined)
+    const result = await callTool('estimate_from_kml', { kml: '<kml>' + 'x'.repeat(100) + '</kml>', postalCode: '84043' }, f.fetch)
+    expect(toolText(result)).toContain(`a quote with this estimate attached, open: ${quoteUrl}`)
   })
 
   it('passes on the API\'s validation message', async () => {
