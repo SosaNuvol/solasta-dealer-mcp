@@ -1,0 +1,23 @@
+{
+  "name": "solasta-dealer-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Public MCP server for Solasta Lighting dealers: price ranges, roofline KML help and quote requests for AI assistants.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261029.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12",
+    "wrangler": "4.157.0"
+  }
+}
