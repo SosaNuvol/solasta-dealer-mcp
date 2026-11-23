@@ -26,7 +26,7 @@ Transport: Streamable HTTP, stateless, JSON responses. No sign-in for AI clients
 
 Prompt: `plan_my_lights`.
 
-Every price is a range (the dealer's uncertainty: ±25% from a footprint, ±10% from a KML by default, rounded to $50) and says the dealer confirms the price after checking the roofline. An address no dealer serves gets "not in your area yet"; its quote request is kept for `DEFAULT_DEALER`, marked out of area.
+Every price is a range (the dealer's uncertainty: ±25% from a footprint, ±10% from a KML by default, rounded to $50) and says it is at retail prices, that seasonal promotions, discounts and installation details change the final price, and that the dealer confirms the price after checking the roofline. The API's closing note also points to the dealer's affiliate program when the dealer has one. An address no dealer serves gets "not in your area yet"; its quote request is kept for `DEFAULT_DEALER`, marked out of area.
 
 ## Abuse limits
 

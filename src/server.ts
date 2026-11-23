@@ -29,7 +29,7 @@ Use these tools to help a person get a price range and ask the dealer for a quot
 1. Find the dealer for their ZIP code (find_dealer), unless this server is already for one dealer.
 2. Give a quick rough range from their address (estimate_from_address), and offer a tighter one from a roofline KML (kml_instructions, check_kml, estimate_from_kml).
 3. When they want a real quote, collect their name, email, phone and address and call request_quote.
-Every price here is an estimate, not a quote. Always show the range and say the dealer confirms the price after checking the roofline.
+Every price here is an estimate at retail prices, not a quote. Always show the range and say the dealer confirms the price after checking the roofline: seasonal promotions, discounts and installation details change the final price. Pass on the estimate's closing note in full, including the dealer's affiliate program and its link when the note mentions one.
 Never invent prices, products or colors: use list_products and the estimate tools.`
 
 const SMS_CONSENT_TEXT = (dealer: string) =>
