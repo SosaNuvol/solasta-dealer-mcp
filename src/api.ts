@@ -148,7 +148,13 @@ let cachedToken: { key: string; value: string; expiresAt: number } | undefined
 export function clearTokenCache(): void { cachedToken = undefined }
 
 export class SolastaApi {
-  constructor(private readonly env: ApiEnv, private readonly fetcher: typeof fetch = fetch) {}
+  private readonly fetcher: typeof fetch
+
+  constructor(private readonly env: ApiEnv, fetcher: typeof fetch = fetch) {
+    // Called as a plain function: the Workers runtime throws "Illegal invocation" when its fetch is called as a
+    // method of another object (this.fetcher(...)).
+    this.fetcher = ((input, init) => fetcher(input, init)) as typeof fetch
+  }
 
   get isConfigured(): boolean {
     const { SOLASTA_API_URL, IDENTITY_TOKEN_URL, MCP_CLIENT_ID, MCP_CLIENT_SECRET } = this.env

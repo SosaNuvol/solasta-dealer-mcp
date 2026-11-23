@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contains, distanceMeters, footprintFeet, FootprintError, OVERPASS_URLS, perimeterMeters, USER_AGENT } from '../src/footprint.js'
+import { contains, distanceMeters, footprintFeet, FootprintError, osmMapOutlines, OVERPASS_URLS, perimeterMeters, USER_AGENT } from '../src/footprint.js'
 import { fakeFetch } from './helpers.js'
 
 // A 20 m x 10 m rectangle near Lehi, UT.
@@ -70,20 +70,44 @@ describe('footprintFeet', () => {
     expect(seen['overpass-api.de']).toBe(USER_AGENT)
   })
 
-  it('tries the next Overpass server when one refuses or is unreachable', async () => {
-    const [, second, third] = OVERPASS_URLS.map(u => new URL(u).hostname)
-    const refuse = (url: URL) => url.hostname === 'overpass-api.de' ? new Response('busy', { status: 429 }) : undefined
-    const answer = (url: URL) => url.hostname === third ? Response.json({ elements: [{ type: 'way', geometry: rect }] }) : undefined
-    const fake = fakeFetch(census, refuse, answer)
-    const wrapped = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (new URL(input.toString()).hostname === second) throw new TypeError('fetch failed')
-      return fake.fetch(input, init)
-    }) as typeof fetch
-    const f = await footprintFeet('123 Main St, Lehi, UT', 'all', wrapped)
+  it('tries the next Overpass server when one refuses', async () => {
+    const second = new URL(OVERPASS_URLS[1]!).hostname
+    const refuse = (url: URL) => url.hostname === 'overpass-api.de' ? new Response('down', { status: 521 }) : undefined
+    const answer = (url: URL) => url.hostname === second ? Response.json({ elements: [{ type: 'way', geometry: rect }] }) : undefined
+    const f = await footprintFeet('123 Main St, Lehi, UT', 'all', fakeFetch(census, refuse, answer).fetch)
     expect(f.perimeterFeet).toBeCloseTo(196.9, 0)
   })
 
-  it('says the outline lookup is down when every Overpass server fails', async () => {
+  it('falls back to the OpenStreetMap API when every Overpass server fails', async () => {
+    const overpassHosts = OVERPASS_URLS.map(u => new URL(u).hostname)
+    const ids = rect.slice(0, 4).map((_, i) => i + 1)
+    const osm = (url: URL) => {
+      if (overpassHosts.includes(url.hostname)) return new Response('timeout', { status: 504 })
+      if (url.hostname !== 'api.openstreetmap.org') return undefined
+      expect(url.searchParams.get('bbox')).toMatch(/^-111\.85\d+,40\.38\d+,-111\.84\d+,40\.39\d+$/)
+      return Response.json({ elements: [
+        ...rect.slice(0, 4).map((p, i) => ({ type: 'node', id: ids[i], lat: p.lat, lon: p.lon })),
+        { type: 'node', id: 99, lat: lat0 + 0.01, lon: lon0 },
+        { type: 'way', id: 1, nodes: [...ids, ids[0]], tags: { building: 'house' } },
+        { type: 'way', id: 2, nodes: [ids[0], 99, ids[1]], tags: { highway: 'residential' } },
+      ] })
+    }
+    const f = await footprintFeet('123 Main St, Lehi, UT', 'all', fakeFetch(census, osm).fetch)
+    expect(f.perimeterFeet).toBeCloseTo(196.9, 0)
+    expect(f.containsAddress).toBe(true)
+  })
+
+  it('ignores OpenStreetMap buildings farther than 40 m', async () => {
+    const far = rect.map(p => ({ lat: p.lat + 0.002, lon: p.lon }))
+    expect(await osmMapOutlines(center, fakeFetch((url: URL) => url.hostname === 'api.openstreetmap.org'
+      ? Response.json({ elements: [
+        ...far.slice(0, 4).map((p, i) => ({ type: 'node', id: i + 1, lat: p.lat, lon: p.lon })),
+        { type: 'way', id: 1, nodes: [1, 2, 3, 4, 1], tags: { building: 'yes' } },
+      ] })
+      : undefined).fetch)).toEqual([])
+  })
+
+  it('says the outline lookup is down when every map service fails', async () => {
     const refuse = (url: URL) => url.hostname !== 'geocoding.geo.census.gov' ? new Response('busy', { status: 504 }) : undefined
     await expect(footprintFeet('123 Main St, Lehi, UT', 'all', fakeFetch(census, refuse).fetch))
       .rejects.toThrow(/building outline lookup is not available/)
