@@ -2,6 +2,8 @@
 // creation; this Worker only passes requests on. It signs in with the dealer-mcp client's credentials (scope
 // public.estimate) and never sends that token to the AI client.
 
+import { describeError } from './errors.js'
+
 export interface ApiEnv {
   SOLASTA_API_URL?: string
   IDENTITY_TOKEN_URL?: string
@@ -182,7 +184,7 @@ export class SolastaApi {
     const url = new URL(path, this.env.SOLASTA_API_URL)
     if (url.protocol !== 'https:' && url.hostname !== 'localhost') throw new ApiError('The estimate service is not configured yet.', 503)
 
-    const send = (token: string) => this.fetcher(url, {
+    const fetchApi = (token: string) => this.fetcher(url, {
       method,
       headers: {
         Accept: 'application/json',
@@ -193,6 +195,12 @@ export class SolastaApi {
       signal: AbortSignal.timeout(20000),
       redirect: 'manual',
     })
+    const send = async (token: string) => {
+      try { return await fetchApi(token) } catch (error) {
+        console.error('Solasta API unreachable', { path: url.pathname, ...describeError(error) })
+        throw new ApiError('The estimate service is not available right now. Please try again in a few minutes.', 502)
+      }
+    }
 
     let response = await send(await this.token(false))
     if (response.status === 401) response = await send(await this.token(true))
@@ -215,21 +223,31 @@ export class SolastaApi {
     const { IDENTITY_TOKEN_URL, MCP_CLIENT_ID, MCP_CLIENT_SECRET } = this.env
     const key = `${IDENTITY_TOKEN_URL}|${MCP_CLIENT_ID}`
     if (!refresh && cachedToken && cachedToken.key === key && cachedToken.expiresAt > Date.now()) return cachedToken.value
-    const response = await this.fetcher(IDENTITY_TOKEN_URL!, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials', client_id: MCP_CLIENT_ID!, client_secret: MCP_CLIENT_SECRET!, scope: 'public.estimate',
-      }),
-      signal: AbortSignal.timeout(10000),
-      redirect: 'manual',
-    })
+    let response: Response
+    try {
+      response = await this.fetcher(IDENTITY_TOKEN_URL!, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials', client_id: MCP_CLIENT_ID!, client_secret: MCP_CLIENT_SECRET!, scope: 'public.estimate',
+        }),
+        signal: AbortSignal.timeout(10000),
+        redirect: 'manual',
+      })
+    } catch (error) {
+      console.error('Identity Server unreachable', describeError(error))
+      throw new ApiError('The estimate service is not available right now. Please try again in a few minutes.', 502)
+    }
     if (!response.ok) {
       console.error('Identity Server refused the dealer-mcp client', { status: response.status })
       throw new ApiError('The estimate service is not available right now. Please try again in a few minutes.', 502)
     }
-    const data = (await response.json()) as { access_token?: string; expires_in?: number }
-    if (!data.access_token) throw new ApiError('The estimate service is not available right now.', 502)
+    let data: { access_token?: string; expires_in?: number } | undefined
+    try { data = (await response.json()) as typeof data } catch { data = undefined }
+    if (!data?.access_token) {
+      console.error('Identity Server answered without a token', { status: response.status })
+      throw new ApiError('The estimate service is not available right now. Please try again in a few minutes.', 502)
+    }
     // Renew a minute early.
     cachedToken = { key, value: data.access_token, expiresAt: Date.now() + Math.max(0, (data.expires_in ?? 300) - 60) * 1000 }
     return data.access_token

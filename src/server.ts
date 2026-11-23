@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { ApiError, type DealerSummary, type Estimate, type EstimateRequest, type SolastaApi } from './api.js'
+import { describeError } from './errors.js'
 import { emailProblem, phoneProblem, US_STATE, US_ZIP } from './contact.js'
 import { type Coverage, footprintFeet, FootprintError, FRONT_SHARE } from './footprint.js'
 import { KML_GUIDE_URI, kmlGuide } from './kmlGuide.js'
@@ -70,7 +71,7 @@ export function buildServer(options: ServerOptions): McpServer {
   const guard = async (work: () => Promise<CallToolResult>): Promise<CallToolResult> => {
     try { return await work() } catch (error) {
       if (error instanceof ApiError || error instanceof FootprintError) return failure(error.message)
-      console.error('Tool failed', { error: error instanceof Error ? error.name : 'unknown' })
+      console.error('Tool failed', describeError(error))
       return failure('Something went wrong on our side. Please try again in a few minutes.')
     }
   }
