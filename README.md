@@ -68,8 +68,9 @@ Run `npx wrangler tail` (or open the Worker's Logs in the Cloudflare dashboard) 
 | `Identity Server unreachable` / `refused the dealer-mcp client` / `answered without a token` | The `dealer-mcp` client or its secret is wrong or missing on the Identity Server, or it is down |
 | `Solasta API unreachable` / `Solasta API call failed` | The API is down or answered with an error (the status is logged) |
 | `Address lookup ...` | The US Census geocoder is down |
-| `Building outline lookup ...` | An Overpass server refused or timed out; the next one in `OVERPASS_URLS` is tried |
+| `Building outline lookup ...` | A map service refused or timed out; the next Overpass server in `OVERPASS_URLS` is tried, then the OpenStreetMap API |
 | `Tool failed` | Anything else, with the error's name and message |
+| `Illegal invocation` | `fetch` was called as a method of another object; the Workers runtime only allows a plain call |
 
 ## Try it in Claude
 
