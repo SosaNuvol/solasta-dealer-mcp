@@ -99,6 +99,8 @@ export interface Estimate {
   validUntil: string
   warnings: string[]
   disclaimer: string
+  /** The dealer's quote form with this estimate attached (`...?estimate={estimateId}`), when the dealer has one. */
+  quoteUrl?: string | null
 }
 
 export interface QuoteRequest {
