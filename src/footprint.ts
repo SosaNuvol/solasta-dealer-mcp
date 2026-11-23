@@ -7,6 +7,8 @@ import { describeError } from './errors.js'
 
 export interface GeocodedAddress {
   matchedAddress: string
+  /** The street line of the matched address ("123 Main St"), when the match has one. */
+  street?: string
   latitude: number
   longitude: number
   city?: string
@@ -84,6 +86,7 @@ export async function geocode(address: string, fetcher: typeof fetch = fetch): P
     throw new FootprintError('That address was not found. Check the street, city and state, or give the ZIP code.')
   return {
     matchedAddress: match.matchedAddress ?? address,
+    street: match.matchedAddress && match.matchedAddress.includes(',') ? titleCase(match.matchedAddress.split(',')[0]?.trim()) : undefined,
     latitude: lat,
     longitude: lon,
     city: titleCase(match.addressComponents?.city),
