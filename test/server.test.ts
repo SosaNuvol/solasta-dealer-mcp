@@ -160,4 +160,14 @@ describe('MCP endpoint', () => {
     const text = toolText(await callTool('find_dealer', { postalCode: '84097' }, down))
     expect(text).toContain('estimate service is not available')
   })
+
+  it('calls fetch as a plain function, as the Workers runtime requires', async () => {
+    const fake = fakeFetch(dealers)
+    const strict = function (this: unknown, input: RequestInfo | URL, init?: RequestInit) {
+      if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation')
+      return fake.fetch(input, init)
+    } as typeof fetch
+    const text = toolText(await callTool('find_dealer', { postalCode: '84097' }, strict))
+    expect(text).toContain('Solasta Lighting')
+  })
 })
