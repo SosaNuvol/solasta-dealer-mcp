@@ -28,7 +28,7 @@ const INSTRUCTIONS = `Solasta Lighting and its dealers design and install perman
 Use these tools to help a person get a price range and ask the dealer for a quote:
 1. Find the dealer for their ZIP code (find_dealer), unless this server is already for one dealer.
 2. Give a quick rough range from their address (estimate_from_address), and offer a tighter one from a roofline KML (kml_instructions, check_kml, estimate_from_kml).
-3. When they want a real quote, collect their name, email, phone and address and call request_quote. When an estimate includes a quote form link, always show it as a clickable link: the person can open it instead to fill in the dealer's quote form with the estimate already attached.
+3. When they want a real quote, collect their name, email, phone and address and call request_quote. When an estimate includes a quote form link, always show it as a clickable link: the person can open it instead to fill in the dealer's quote form with the estimate and address already filled in.
 Every price here is an estimate at retail prices, not a quote. Always show the range and say the dealer confirms the price after checking the roofline: seasonal promotions, discounts and installation details change the final price. Pass on the estimate's closing note in full, including the dealer's affiliate program and its link when the note mentions one.
 Never invent prices, products or colors: use list_products and the estimate tools.`
 
@@ -157,6 +157,7 @@ export function buildServer(options: ServerOptions): McpServer {
       source: 'Footprint', feet: footprint.feet, productSku: args.productSku, variantStockItemId: args.variantStockItemId,
       city: address.city, state: address.state, postalCode: address.postalCode,
     })
+    estimate.quoteUrl = withAddress(estimate.quoteUrl, { street: address.street, city: address.city, state: address.state, postalCode: address.postalCode })
     const notes = [
       `Address found: ${address.matchedAddress}.`,
       `Building outline from ${footprint.source}${footprint.containsAddress ? '' : ' (the nearest building to the address point; check it is the right one)'}: about ${Math.round(footprint.perimeterFeet)} ft around${args.coverage === 'front' ? `, about ${Math.round(footprint.feet)} ft counted for the front` : ''}.`,
@@ -205,6 +206,7 @@ export function buildServer(options: ServerOptions): McpServer {
       postalCode: zipArg,
       city: z.string().trim().min(2).max(100).optional(),
       state: z.string().trim().toUpperCase().regex(US_STATE, 'Two-letter state').optional(),
+      street: z.string().trim().min(3).max(200).optional().describe('The street address ("123 Main St"), if the person gave it. Only fills in the quote form link.'),
       productSku: skuArg,
       variantStockItemId: variantArg,
       addOns: z.array(z.object({ sku: z.string().trim().min(1).max(50), quantity: z.number().int().min(1).max(20) })).max(10).optional()
@@ -212,7 +214,7 @@ export function buildServer(options: ServerOptions): McpServer {
       ...(fixedDealer ? {} : { dealer: dealerArg }),
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
-  }, (args: { kml: string; postalCode: string; city?: string; state?: string; productSku?: string; variantStockItemId?: number; addOns?: { sku: string; quantity: number }[]; dealer?: string }) => guard(async () => {
+  }, (args: { kml: string; postalCode: string; city?: string; state?: string; street?: string; productSku?: string; variantStockItemId?: number; addOns?: { sku: string; quantity: number }[]; dealer?: string }) => guard(async () => {
     const { dealer, covered } = await resolveDealer(args.dealer, args.postalCode)
     if (!dealer) return notServed(args.postalCode)
     const request: EstimateRequest = {
@@ -220,6 +222,7 @@ export function buildServer(options: ServerOptions): McpServer {
       city: args.city, state: args.state, postalCode: args.postalCode,
     }
     const estimate = await api.estimate(dealer.slug, request)
+    estimate.quoteUrl = withAddress(estimate.quoteUrl, { street: args.street, city: args.city, state: args.state, postalCode: args.postalCode })
     const notes = covered ? [] : [`${dealer.displayName} does not list ZIP ${args.postalCode} in its service area, so check with them before relying on this.`]
     return text(describeEstimate(dealer.displayName, estimate, notes))
   }))
@@ -295,6 +298,16 @@ export function buildServer(options: ServerOptions): McpServer {
   }))
 
   return server
+}
+
+/** The quote form link with the person's address added, so the form opens with it filled in. */
+export function withAddress(quoteUrl: string | null | undefined, address: { street?: string; city?: string; state?: string; postalCode?: string }): string | null | undefined {
+  if (!quoteUrl) return quoteUrl
+  let url: URL
+  try { url = new URL(quoteUrl) } catch { return quoteUrl }
+  const fields: [string, string | undefined][] = [['street', address.street], ['city', address.city], ['state', address.state], ['zip', address.postalCode]]
+  for (const [name, value] of fields) if (value?.trim()) url.searchParams.set(name, value.trim())
+  return url.toString()
 }
 
 export function describeEstimate(dealerName: string, e: Estimate, notes: string[] = []): string {

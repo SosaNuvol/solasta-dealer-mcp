@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Estimate } from '../src/api.js'
+import { withAddress } from '../src/server.js'
 import { callTool, fakeFetch, payload, rpc, toolText } from './helpers.js'
 
 const solasta = { slug: 'solasta', displayName: 'Solasta Lighting', websiteUrl: 'https://mysolasta.com', phone: '801-555-2368' }
@@ -65,7 +66,20 @@ describe('MCP endpoint', () => {
     const quoteUrl = 'https://mysolasta.com/quote?estimate=MAPE%3A1%3Aabc'
     const f = fakeFetch(dealers, (url: URL) => url.pathname === '/api/public/solasta/estimates' ? payload({ ...estimate, quoteUrl }) : undefined)
     const result = await callTool('estimate_from_kml', { kml: '<kml>' + 'x'.repeat(100) + '</kml>', postalCode: '84043' }, f.fetch)
-    expect(toolText(result)).toContain(`a quote with this estimate attached, open: ${quoteUrl}`)
+    expect(toolText(result)).toContain(`a quote with this estimate attached, open: ${quoteUrl}&zip=84043`)
+  })
+
+  it('adds the address to the quote form link so the form opens filled in', async () => {
+    const quoteUrl = 'https://mysolasta.com/quote?estimate=MAPE%3A1%3Aabc'
+    const f = fakeFetch(dealers, (url: URL) => url.pathname === '/api/public/solasta/estimates' ? payload({ ...estimate, quoteUrl }) : undefined)
+    const result = await callTool('estimate_from_kml', { kml: '<kml>' + 'x'.repeat(100) + '</kml>', postalCode: '84043', city: 'Lehi', state: 'ut', street: '123 Main St' }, f.fetch)
+    const link = new URL(toolText(result).match(/open: (\S+)/)![1]!)
+    expect(Object.fromEntries(link.searchParams)).toEqual({ estimate: 'MAPE:1:abc', street: '123 Main St', city: 'Lehi', state: 'UT', zip: '84043' })
+  })
+
+  it('leaves out the link when the dealer has no quote form', () => {
+    expect(withAddress(null, { street: '1 A St' })).toBeNull()
+    expect(withAddress(undefined, {})).toBeUndefined()
   })
 
   it('passes on the API\'s validation message', async () => {
