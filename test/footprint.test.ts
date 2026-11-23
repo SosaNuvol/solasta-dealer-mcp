@@ -33,6 +33,7 @@ describe('footprint geometry', () => {
 describe('footprintFeet', () => {
   it('turns the outline into feet', async () => {
     const f = await footprintFeet('123 Main St, Lehi, UT', 'all', fakeFetch(census, overpass()).fetch)
+    expect(f.address).toMatchObject({ street: '123 Main St', city: 'Lehi', state: 'UT', postalCode: '84043' })
     expect(f.perimeterFeet).toBeCloseTo(196.9, 0)
     expect(f.feet).toBe(f.perimeterFeet)
     expect(f.containsAddress).toBe(true)
