@@ -3,6 +3,8 @@
 // from the house, or which sides the person wants lit, so estimates from it carry the dealer's footprint uncertainty
 // (+/-25% by default) and always say "rough".
 
+import { describeError } from './errors.js'
+
 export interface GeocodedAddress {
   matchedAddress: string
   latitude: number
@@ -33,7 +35,14 @@ export type Coverage = 'all' | 'front'
 export const FRONT_SHARE = 0.3
 
 const CENSUS_URL = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress'
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
+/** Public Overpass servers, tried in order: the main one turns busy or unknown clients away at times. */
+export const OVERPASS_URLS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+]
+/** Both public services ask clients to say who they are; anonymous Worker traffic is refused more often. */
+export const USER_AGENT = 'solasta-dealer-mcp/1.0 (+https://mcp.mysolasta.com)'
 const FEET_PER_METER = 3.280839895
 const EARTH_RADIUS_M = 6371008.8
 
@@ -48,8 +57,17 @@ export async function geocode(address: string, fetcher: typeof fetch = fetch): P
   url.searchParams.set('address', address)
   url.searchParams.set('benchmark', 'Public_AR_Current')
   url.searchParams.set('format', 'json')
-  const response = await fetcher(url, { signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json' } })
-  if (!response.ok) throw new FootprintError('The address lookup is not available right now.')
+  let response: Response
+  try {
+    response = await fetcher(url, { signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json', 'User-Agent': USER_AGENT } })
+  } catch (error) {
+    console.error('Address lookup unreachable', describeError(error))
+    throw new FootprintError('The address lookup is not available right now.')
+  }
+  if (!response.ok) {
+    console.error('Address lookup failed', { status: response.status })
+    throw new FootprintError('The address lookup is not available right now.')
+  }
   const data = (await response.json()) as {
     result?: { addressMatches?: { matchedAddress?: string; coordinates?: { x?: number; y?: number }; addressComponents?: { city?: string; state?: string; zip?: string } }[] }
   }
@@ -72,14 +90,7 @@ type Point = { lat: number; lon: number }
 
 export async function buildingOutline(at: Point, fetcher: typeof fetch = fetch): Promise<{ outline: Point[]; containsAddress: boolean }> {
   const query = `[out:json][timeout:10];way(around:40,${at.lat.toFixed(6)},${at.lon.toFixed(6)})["building"];out geom;`
-  const response = await fetcher(OVERPASS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: new URLSearchParams({ data: query }),
-    signal: AbortSignal.timeout(15000),
-  })
-  if (!response.ok) throw new FootprintError('The building outline lookup is not available right now.')
-  const data = (await response.json()) as { elements?: { type?: string; geometry?: Point[] }[] }
+  const data = await overpass(query, fetcher)
   const outlines = (data.elements ?? [])
     .map(e => e.geometry ?? [])
     .filter(g => g.length >= 4 && g.every(p => typeof p.lat === 'number' && typeof p.lon === 'number'))
@@ -90,6 +101,33 @@ export async function buildingOutline(at: Point, fetcher: typeof fetch = fetch):
     .map(o => ({ o, d: Math.min(...o.map(p => distanceMeters(p, at))) }))
     .sort((a, b) => a.d - b.d)[0]!
   return { outline: nearest.o, containsAddress: false }
+}
+
+type OverpassResult = { elements?: { type?: string; geometry?: Point[] }[] }
+
+/** Runs the query on the first Overpass server that answers with JSON. */
+async function overpass(query: string, fetcher: typeof fetch): Promise<OverpassResult> {
+  for (const endpoint of OVERPASS_URLS) {
+    const host = new URL(endpoint).hostname
+    try {
+      const response = await fetcher(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'User-Agent': USER_AGENT },
+        body: new URLSearchParams({ data: query }),
+        signal: AbortSignal.timeout(12000),
+      })
+      if (!response.ok) {
+        console.error('Building outline lookup failed', { host, status: response.status })
+        continue
+      }
+      const data = (await response.json()) as OverpassResult
+      if (Array.isArray(data?.elements)) return data
+      console.error('Building outline lookup answered without elements', { host })
+    } catch (error) {
+      console.error('Building outline lookup unreachable', { host, ...describeError(error) })
+    }
+  }
+  throw new FootprintError('The building outline lookup is not available right now.')
 }
 
 export async function footprintFeet(address: string, coverage: Coverage, fetcher: typeof fetch = fetch): Promise<Footprint> {

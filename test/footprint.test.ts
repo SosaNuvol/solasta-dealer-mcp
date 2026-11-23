@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contains, distanceMeters, footprintFeet, FootprintError, perimeterMeters } from '../src/footprint.js'
+import { contains, distanceMeters, footprintFeet, FootprintError, OVERPASS_URLS, perimeterMeters, USER_AGENT } from '../src/footprint.js'
 import { fakeFetch } from './helpers.js'
 
 // A 20 m x 10 m rectangle near Lehi, UT.
@@ -56,5 +56,41 @@ describe('footprintFeet', () => {
       ? Response.json({ result: { addressMatches: [{ coordinates: { x: point.lon, y: point.lat }, addressComponents: {} }] } })
       : undefined
     await expect(footprintFeet('shed', 'all', fakeFetch(near, overpass(tiny)).fetch)).rejects.toThrow(/does not look like/)
+  })
+
+  it('says who it is to the address and outline services', async () => {
+    const fake = fakeFetch(census, overpass())
+    const seen: Record<string, string | null> = {}
+    const wrapped = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen[new URL(input.toString()).hostname] = new Headers(init?.headers).get('User-Agent')
+      return fake.fetch(input, init)
+    }) as typeof fetch
+    await footprintFeet('123 Main St, Lehi, UT', 'all', wrapped)
+    expect(seen['geocoding.geo.census.gov']).toBe(USER_AGENT)
+    expect(seen['overpass-api.de']).toBe(USER_AGENT)
+  })
+
+  it('tries the next Overpass server when one refuses or is unreachable', async () => {
+    const [, second, third] = OVERPASS_URLS.map(u => new URL(u).hostname)
+    const refuse = (url: URL) => url.hostname === 'overpass-api.de' ? new Response('busy', { status: 429 }) : undefined
+    const answer = (url: URL) => url.hostname === third ? Response.json({ elements: [{ type: 'way', geometry: rect }] }) : undefined
+    const fake = fakeFetch(census, refuse, answer)
+    const wrapped = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (new URL(input.toString()).hostname === second) throw new TypeError('fetch failed')
+      return fake.fetch(input, init)
+    }) as typeof fetch
+    const f = await footprintFeet('123 Main St, Lehi, UT', 'all', wrapped)
+    expect(f.perimeterFeet).toBeCloseTo(196.9, 0)
+  })
+
+  it('says the outline lookup is down when every Overpass server fails', async () => {
+    const refuse = (url: URL) => url.hostname !== 'geocoding.geo.census.gov' ? new Response('busy', { status: 504 }) : undefined
+    await expect(footprintFeet('123 Main St, Lehi, UT', 'all', fakeFetch(census, refuse).fetch))
+      .rejects.toThrow(/building outline lookup is not available/)
+  })
+
+  it('turns an unreachable address lookup into a plain message', async () => {
+    const down = (async () => { throw new TypeError('fetch failed') }) as typeof fetch
+    await expect(footprintFeet('123 Main St, Lehi, UT', 'all', down)).rejects.toThrow(/address lookup is not available/)
   })
 })

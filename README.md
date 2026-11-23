@@ -59,6 +59,18 @@ The Identity Server needs a `dealer-mcp` client (client credentials, scope `publ
 
 `npx wrangler deploy` publishes to the `mcp.mysolasta.com` custom domain (the `mysolasta.com` zone must be in the same Cloudflare account). Check it with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) against `https://mcp.mysolasta.com/mcp`.
 
+## Troubleshooting
+
+Run `npx wrangler tail` (or open the Worker's Logs in the Cloudflare dashboard) and retry the tool. Each failure logs one line:
+
+| Log line | Meaning |
+| --- | --- |
+| `Identity Server unreachable` / `refused the dealer-mcp client` / `answered without a token` | The `dealer-mcp` client or its secret is wrong or missing on the Identity Server, or it is down |
+| `Solasta API unreachable` / `Solasta API call failed` | The API is down or answered with an error (the status is logged) |
+| `Address lookup ...` | The US Census geocoder is down |
+| `Building outline lookup ...` | An Overpass server refused or timed out; the next one in `OVERPASS_URLS` is tried |
+| `Tool failed` | Anything else, with the error's name and message |
+
 ## Try it in Claude
 
 Settings → Connectors → Add custom connector → `https://mcp.mysolasta.com/mcp`.

@@ -130,4 +130,34 @@ describe('MCP endpoint', () => {
     expect(data.result.isError).toBe(true)
     expect(data.result.content[0]!.text).toContain('not configured')
   })
+
+  it('says the service is down when the Identity Server cannot be reached', async () => {
+    const fake = fakeFetch(dealers)
+    const down = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (new URL(input.toString()).pathname === '/connect/token') throw new TypeError('fetch failed')
+      return fake.fetch(input, init)
+    }) as typeof fetch
+    const text = toolText(await callTool('find_dealer', { postalCode: '84097' }, down))
+    expect(text).toContain('estimate service is not available')
+  })
+
+  it('says the service is down when the Identity Server answers without a token', async () => {
+    const fake = fakeFetch(dealers)
+    const odd = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (new URL(input.toString()).pathname === '/connect/token') return new Response('<html>maintenance</html>', { status: 200 })
+      return fake.fetch(input, init)
+    }) as typeof fetch
+    const text = toolText(await callTool('find_dealer', { postalCode: '84097' }, odd))
+    expect(text).toContain('estimate service is not available')
+  })
+
+  it('says the service is down when the API cannot be reached', async () => {
+    const fake = fakeFetch()
+    const down = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (new URL(input.toString()).pathname.startsWith('/api/')) throw new TypeError('fetch failed')
+      return fake.fetch(input, init)
+    }) as typeof fetch
+    const text = toolText(await callTool('find_dealer', { postalCode: '84097' }, down))
+    expect(text).toContain('estimate service is not available')
+  })
 })
