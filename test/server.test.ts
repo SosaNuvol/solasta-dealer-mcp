@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { Estimate } from '../src/api.js'
-import { withAddress } from '../src/server.js'
+import { ICON_URL, SERVER_NAME, SERVER_VERSION, WEBSITE_URL, withAddress } from '../src/server.js'
+import registry from '../server.json'
+import pkg from '../package.json'
 import { callTool, fakeFetch, payload, rpc, toolText } from './helpers.js'
 
 const solasta = { slug: 'solasta', displayName: 'Solasta Lighting', websiteUrl: 'https://mysolasta.com', phone: '801-555-2368' }
@@ -191,5 +193,35 @@ describe('MCP endpoint', () => {
     } as typeof fetch
     const text = toolText(await callTool('find_dealer', { postalCode: '84097' }, strict))
     expect(text).toContain('Solasta Lighting')
+  })
+})
+
+describe('directory metadata', () => {
+  it('sets readOnlyHint, destructiveHint and openWorldHint on every tool', async () => {
+    const result = await rpc('tools/list', {}, fakeFetch().fetch)
+    expect(result.tools.length).toBeGreaterThan(0)
+    for (const tool of result.tools) {
+      for (const hint of ['readOnlyHint', 'destructiveHint', 'openWorldHint']) {
+        expect(typeof tool.annotations?.[hint], `${tool.name}.${hint}`).toBe('boolean')
+      }
+      if (tool.annotations.readOnlyHint) expect(tool.annotations.destructiveHint, tool.name).toBe(false)
+    }
+  })
+
+  it('returns the icon and website on initialize', async () => {
+    const result = await rpc('initialize', {
+      protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' },
+    }, fakeFetch().fetch)
+    expect(result.serverInfo).toMatchObject({ name: SERVER_NAME, version: SERVER_VERSION, websiteUrl: WEBSITE_URL })
+    expect(result.serverInfo.icons).toEqual([{ src: ICON_URL, mimeType: 'image/svg+xml', sizes: ['any'] }])
+  })
+
+  it('keeps server.json in step with the server', () => {
+    expect(registry.version).toBe(SERVER_VERSION)
+    expect(pkg.version).toBe(SERVER_VERSION)
+    expect(registry.websiteUrl).toBe(WEBSITE_URL)
+    expect(registry.icons[0]?.src).toBe(ICON_URL)
+    expect(registry.description.length).toBeLessThanOrEqual(100)
+    expect(registry.remotes).toEqual([{ type: 'streamable-http', url: 'https://mcp.mysolasta.com/mcp' }])
   })
 })
