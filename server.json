@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.mysolasta/lighting",
+  "title": "Solasta Lighting estimates",
+  "description": "Price ranges, roofline KML help and dealer quote requests for permanent roofline lighting.",
+  "version": "1.0.0",
+  "websiteUrl": "https://mysolasta.com",
+  "icons": [
+    { "src": "https://www.mysolasta.com/assets/solasta-logo-BBo8bzlH.svg", "mimeType": "image/svg+xml", "sizes": ["any"] }
+  ],
+  "remotes": [
+    { "type": "streamable-http", "url": "https://mcp.mysolasta.com/mcp" }
+  ]
+}
