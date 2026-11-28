@@ -8,7 +8,10 @@ import { type Coverage, footprintFeet, FootprintError, FRONT_SHARE } from './foo
 import { KML_GUIDE_URI, kmlGuide } from './kmlGuide.js'
 
 export const SERVER_NAME = 'solasta-dealer-mcp'
-export const SERVER_VERSION = '0.1.0'
+export const SERVER_VERSION = '1.0.0'
+export const WEBSITE_URL = 'https://mysolasta.com'
+/** The Solasta logo as the website serves it. The file name carries a build hash, so update it if the website's logo changes. */
+export const ICON_URL = 'https://www.mysolasta.com/assets/solasta-logo-BBo8bzlH.svg'
 
 /** Largest KML text accepted from an AI client (a home has a few dozen pins; this leaves lots of room). */
 export const MAX_KML_CHARS = 500_000
@@ -50,7 +53,10 @@ export function buildServer(options: ServerOptions): McpServer {
   const { api, dealer: fixedDealer, defaultDealer } = options
   const fetcher = options.fetcher ?? fetch
   const server = new McpServer(
-    { name: SERVER_NAME, version: SERVER_VERSION, title: 'Solasta Lighting estimates' },
+    {
+      name: SERVER_NAME, version: SERVER_VERSION, title: 'Solasta Lighting estimates', websiteUrl: WEBSITE_URL,
+      icons: [{ src: ICON_URL, mimeType: 'image/svg+xml', sizes: ['any'] }],
+    },
     { instructions: INSTRUCTIONS },
   )
 
@@ -84,7 +90,7 @@ export function buildServer(options: ServerOptions): McpServer {
     title: 'Find the dealer for a ZIP code',
     description: 'Lists the Solasta dealers that install in a US ZIP code, with their website and phone.',
     inputSchema: { postalCode: zipArg },
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, ({ postalCode }) => guard(async () => {
     const lookup = await api.findDealers(postalCode.slice(0, 5))
     if (!lookup.covered || lookup.dealers.length === 0) return notServed(postalCode)
@@ -98,7 +104,7 @@ export function buildServer(options: ServerOptions): McpServer {
     title: 'About the dealer',
     description: 'The dealer\'s contact details, where it installs, and how its estimates work.',
     inputSchema: fixedDealer ? {} : { dealer: z.string().trim().min(2).max(40).describe('Dealer slug from find_dealer.') },
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, (args: { dealer?: string }) => guard(async () => {
     const slug = fixedDealer ?? args.dealer!
     const p = await api.profile(slug)
@@ -118,7 +124,7 @@ export function buildServer(options: ServerOptions): McpServer {
     title: 'Products and colors',
     description: 'The dealer\'s lighting products with list prices: rails priced per foot (with their colors), fixed costs and add-ons, and current public promotions.',
     inputSchema: fixedDealer ? {} : { dealer: dealerArg, postalCode: zipArg.optional() },
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, (args: { dealer?: string; postalCode?: string }) => guard(async () => {
     const { dealer, covered } = await resolveDealer(args.dealer, args.postalCode)
     if (!dealer) return args.postalCode && !covered ? notServed(args.postalCode) : failure('Give the ZIP code or the dealer so I know whose prices to show.')
@@ -147,7 +153,7 @@ export function buildServer(options: ServerOptions): McpServer {
       variantStockItemId: variantArg,
       ...(fixedDealer ? {} : { dealer: dealerArg }),
     },
-    annotations: { readOnlyHint: true, openWorldHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, (args: { address: string; coverage: Coverage; productSku?: string; variantStockItemId?: number; dealer?: string }) => guard(async () => {
     const footprint = await footprintFeet(args.address, args.coverage, fetcher)
     const { address } = footprint
@@ -171,7 +177,7 @@ export function buildServer(options: ServerOptions): McpServer {
     title: 'How to map a roofline',
     description: 'Step-by-step instructions for dropping roofline pins in Google Earth and exporting them as a KML file, named so the dealer can measure them.',
     inputSchema: { device: z.enum(['desktop', 'phone']).optional().describe('What the person will use, if known.') },
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, ({ device }) => Promise.resolve(text(kmlGuide(device))))
 
   server.registerResource('roofline-kml-guide', KML_GUIDE_URI, {
@@ -184,7 +190,7 @@ export function buildServer(options: ServerOptions): McpServer {
     title: 'Check a roofline KML',
     description: 'Reads a roofline KML the way the installer\'s tools do: the pins, the lit runs and their feet by side, and plain-language problems to fix. Nothing is saved.',
     inputSchema: { kml: kmlArg, ...(fixedDealer ? {} : { dealer: dealerArg }) },
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, (args: { kml: string; dealer?: string }) => guard(async () => {
     const check = await api.checkKml(fixedDealer ?? args.dealer ?? defaultDealer, args.kml)
     const locations = check.locations.map(l => `- ${l.location}: ${l.feet.toFixed(1)} ft`).join('\n')
@@ -213,7 +219,7 @@ export function buildServer(options: ServerOptions): McpServer {
         .describe('Add-ons from list_products the person wants, with quantities.'),
       ...(fixedDealer ? {} : { dealer: dealerArg }),
     },
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, (args: { kml: string; postalCode: string; city?: string; state?: string; street?: string; productSku?: string; variantStockItemId?: number; addOns?: { sku: string; quantity: number }[]; dealer?: string }) => guard(async () => {
     const { dealer, covered } = await resolveDealer(args.dealer, args.postalCode)
     if (!dealer) return notServed(args.postalCode)

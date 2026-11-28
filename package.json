@@ -1,6 +1,6 @@
 {
   "name": "solasta-dealer-mcp",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Public MCP server for Solasta Lighting dealers: price ranges, roofline KML help and quote requests for AI assistants.",
   "type": "module",

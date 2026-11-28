@@ -72,6 +72,17 @@ Run `npx wrangler tail` (or open the Worker's Logs in the Cloudflare dashboard) 
 | `Tool failed` | Anything else, with the error's name and message |
 | `Illegal invocation` | `fetch` was called as a method of another object; the Workers runtime only allows a plain call |
 
+## Directory listings
+
+`initialize` returns the server's `websiteUrl` (`https://mysolasta.com`) and an `icons` entry with the Solasta logo from the website (`ICON_URL` in `src/server.ts`). Its file name carries the website's build hash, so update `ICON_URL` and `server.json` together if the logo URL changes. Every tool sets `readOnlyHint`, `destructiveHint` and `openWorldHint`, as the ChatGPT directory requires; a test checks it.
+
+`server.json` describes the server for the [official MCP Registry](https://registry.modelcontextprotocol.io) as `com.mysolasta/lighting`, a remote `streamable-http` server at `https://mcp.mysolasta.com/mcp`. Keep its `version` equal to `SERVER_VERSION` and `package.json` (a test checks it). Publishing needs Andres's OK; it uses DNS auth for `mysolasta.com`:
+
+```sh
+mcp-publisher login dns --domain mysolasta.com --private-key <key>   # after adding the TXT record the tool prints
+mcp-publisher publish
+```
+
 ## Try it in Claude
 
 Settings → Connectors → Add custom connector → `https://mcp.mysolasta.com/mcp`.
